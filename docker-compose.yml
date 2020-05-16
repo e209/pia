@@ -1,0 +1,81 @@
+# Setting ${} variables is on your own, you can define these in '.env' file or by exporting shell environment variables:
+#
+# ${LOCAL_NETWORK_IP}/${LOCAL_NETWORK_MASK} - trusted local network, from which access to proxy is allowed without a password
+# ${PIA_LOGIN}/${PIA_PASSWORD} - credentials given by Private Internet Access
+# ${PROXY_LOGIN}/${PASSWORD} - your own credenials for external (from internet) proxy access
+#
+
+version: "3"
+services:
+  ovpn-dante:
+    build:
+      context: .
+      dockerfile: ./ovpn-dante/Dockerfile
+    image: e209/pia-ovpn-dante
+    container_name: pia-ovpn-cli
+    cap_add:
+      # this capability is necessary for firewall setup
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    dns:
+    # PIA nameservers, that's essential for preventing DNS leak
+    - 209.222.18.218
+    - 209.222.18.222
+    ports:
+    - "1080:1080/tcp"
+    - "1080:1080/udp"
+    environment:
+    - LOCAL_NETWORK_IP=${LOCAL_NETWORK_IP}
+    - LOCAL_NETWORK_MASK=${LOCAL_NETWORK_MASK}
+    - REGION=US California
+    - COUNTRY_EXPECTED=US
+    - LOGIN=${PIA_LOGIN}
+    - PASSWORD=${PIA_PASSWORD}
+    - WAIT_FOR_TUN=30
+    - COUNTRYCHECK_INTERVAL=120
+    - CC_MAX_FAILED_ATTEMPTS=3
+    - IP_INFO_URLS=https://ip-api.io/json/ https://ipapi.co/json/ https://iplocate.io/api/lookup/ http://www.geoplugin.net/json.gp/ https://geoip-db.com/json/ https://ipinfo.io/json/
+    - IP_INFO_TARGET_PARAMS=country_code country_code country_code geoplugin_countryCode country_code country
+    networks:
+      network1:
+        # can be removed without any problem for IP auto assignment
+        ipv4_address: 172.28.1.101
+    restart: always
+  3proxy:
+    build:
+      context: .
+      dockerfile: ./3proxy/Dockerfile
+    image: e209/pia-3proxy
+    container_name: pia-3proxy-gw
+    cap_add:
+      # this capability is necessary for firewall setup
+      - NET_ADMIN
+    dns:
+      # PIA nameservers, that's essential for preventing DNS leak
+      - 209.222.18.218
+      - 209.222.18.222
+    ports:
+      - "13128:3128/tcp"
+      - "11080:1080/tcp"
+    environment:
+      - LOCAL_NETWORK_IP=${LOCAL_NETWORK_IP}
+      - LOCAL_NETWORK_MASK=${LOCAL_NETWORK_MASK}
+      # from the container name we get an IP for firewall and routes
+      - OVPN_CONTAINER_NAME=pia-ovpn-cli
+      - LOGIN=${PROXY_LOGIN}
+      - PASSWORD=${PROXY_PASSWORD}
+    networks:
+      network1:
+        # can be removed without any problem for IP auto assignment
+        ipv4_address: 172.28.1.102
+    restart: always
+
+networks:
+  network1:
+    # can be removed without any problem for IP auto assignment
+    ipam:
+      driver: default
+      config:
+      - subnet: 172.28.1.0/24 
+
